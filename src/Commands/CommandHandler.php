@@ -3,22 +3,27 @@
 namespace Telegram\Bot\Commands;
 
 use Illuminate\Support\Collection;
+use ReflectionClass;
+use ReflectionMethod;
 use Telegram\Bot\Bot;
+use Telegram\Bot\Commands\Attributes\Command;
+use Telegram\Bot\Commands\Contracts\CommandContract;
 use Telegram\Bot\Exceptions\TelegramSDKException;
-use Telegram\Bot\Objects\Update;
+use Telegram\Bot\Objects\ResponseObject;
+use Telegram\Bot\Traits\ForwardsCalls;
 use Telegram\Bot\Traits\HasBot;
 
-class CommandHandler
+final class CommandHandler
 {
+    use ForwardsCalls;
     use HasBot;
 
     /** @var CommandBus Telegram Command Bus */
-    protected CommandBus $commandBus;
+    private CommandBus $commandBus;
 
     /**
      * CommandHandler constructor.
      *
-     * @param Bot $bot
      *
      * @throws TelegramSDKException
      */
@@ -30,50 +35,19 @@ class CommandHandler
         $this->registerCommands();
     }
 
-    /**
-     * Return Command Bus.
-     *
-     * @return CommandBus
-     */
-    public function getCommandBus(): CommandBus
+    public function command(string $name, array|string|callable|CommandContract $handler)
     {
-        return $this->commandBus;
-    }
+        $command = match (true) {
+            is_string($handler) && class_exists($handler) => $this->bot->getContainer()->make($handler),
+            ! ($handler instanceof CommandContract) => new CallableCommand($handler),
+            default => $handler,
+        };
 
-    /**
-     * Set command bus.
-     *
-     * @param CommandBus $commandBus
-     *
-     * @return static
-     */
-    public function setCommandBus(CommandBus $commandBus): self
-    {
-        $this->commandBus = $commandBus;
+        $command->setName($name);
 
-        return $this;
-    }
+        $this->commandBus->addCommand($name, $command);
 
-    /**
-     * Get all registered commands.
-     *
-     * @return array
-     */
-    public function getCommands(): array
-    {
-        return $this->commandBus->getCommands();
-    }
-
-    /**
-     * Check update object for a command and process.
-     *
-     * @param Update $update
-     *
-     * @return Update
-     */
-    public function processCommand(Update $update): Update
-    {
-        return $this->commandBus->handler($update);
+        return $command;
     }
 
     /**
@@ -81,7 +55,7 @@ class CommandHandler
      *
      * @throws TelegramSDKException
      */
-    protected function registerCommands(): void
+    private function registerCommands(): void
     {
         $commands = $this->buildCommandsList();
 
@@ -92,11 +66,11 @@ class CommandHandler
     /**
      * Builds the list of commands.
      *
-     * @throws TelegramSDKException
-     *
      * @return array An array of commands which includes global, shared and bot specific commands.
+     *
+     * @throws TelegramSDKException
      */
-    protected function buildCommandsList(): array
+    private function buildCommandsList(): array
     {
         $commands = $this->bot->config('commands', []);
         $allCommands = collect($this->bot->config('global.commands', []))->merge($this->parseCommands($commands));
@@ -105,14 +79,91 @@ class CommandHandler
     }
 
     /**
+     * Parse an array of commands and build a list.
+     */
+    private function parseCommands(array $commands): array
+    {
+        $groups = $this->bot->config('global.command_groups');
+        $repo = $this->bot->config('global.command_repository');
+
+        return collect($commands)->flatMap(function ($command, $name) use ($groups, $repo): array {
+            // If the command is a group, we'll parse through the group of commands
+            // and resolve the full class name.
+            if (is_string($command) && isset($groups[$command])) {
+                return $this->parseCommands($groups[$command]);
+            }
+
+            // If this is a multi-commands class, we'll parse through the class and
+            // build the commands based on attributes.
+            if (is_int($name) && (is_object($command) || class_exists($command))) {
+                return $this->getAttributeCommands($command);
+            }
+
+            // If this command is actually a command from command repo, we'll extract the full
+            // class name out of the command list now.
+            if (is_string($command) && isset($repo[$command])) {
+                $name = $command;
+                $command = $repo[$command];
+            }
+
+            return [$name => $command];
+        })->all();
+    }
+
+    private function getAttributeCommands(object|string $class): array
+    {
+        $commands = [];
+        $reflectionClass = new ReflectionClass($class);
+        $methods = $reflectionClass->getMethods(ReflectionMethod::IS_PUBLIC);
+
+        if (! is_object($class)) {
+            $class = $this->bot->getContainer()->make($class);
+        }
+
+        foreach ($methods as $method) {
+            $attributes = $method->getAttributes(Command::class);
+            foreach ($attributes as $attribute) {
+                $command = $attribute->newInstance();
+                $commandName = $method->getName();
+                $commandDescription = $command->description;
+
+                $commands[$commandName] = $this->makeAttributeCommand(
+                    $commandName,
+                    $commandDescription,
+                    [$class, $commandName]
+                );
+
+                foreach ($command->aliases as $commandAlias) {
+                    $commands[$commandAlias] = $this->makeAttributeCommand(
+                        $commandAlias,
+                        $commandDescription,
+                        [$class, $commandName]
+                    );
+                }
+            }
+        }
+
+        return $commands;
+    }
+
+    private function makeAttributeCommand(
+        string $name,
+        string $description,
+        array $handler
+    ): CallableCommand {
+        return (new CallableCommand())
+            ->setName($name)
+            ->description($description)
+            ->setCommandHandler($handler);
+    }
+
+    /**
      * Validate that all commands are configured correctly in the config file
      *
-     * @param $allCommands
      *
      * @throws TelegramSDKException
-     * @return array
      */
-    protected function validate(Collection $allCommands): array
+    private function validate(Collection $allCommands): array
     {
         $uniqueCommands = $allCommands->unique();
 
@@ -130,47 +181,47 @@ class CommandHandler
     }
 
     /**
-     * Parse an array of commands and build a list.
-     *
-     * @param array $commands
-     *
-     * @return array
+     * Return Command Bus.
      */
-    protected function parseCommands(array $commands): array
+    public function getCommandBus(): CommandBus
     {
-        $groups = $this->bot->config('global.command_groups');
-        $repo = $this->bot->config('global.command_repository');
+        return $this->commandBus;
+    }
 
-        return collect($commands)->flatMap(function ($command, $name) use ($groups, $repo) {
-            // If the command is a group, we'll parse through the group of commands
-            // and resolve the full class name.
-            if (isset($groups[$command])) {
-                return $this->parseCommands($groups[$command]);
-            }
+    /**
+     * Set command bus.
+     */
+    public function setCommandBus(CommandBus $commandBus): self
+    {
+        $this->commandBus = $commandBus;
 
-            // If this command is actually a command from command repo, we'll extract the full
-            // class name out of the command list now.
-            if (isset($repo[$command])) {
-                $name = $command;
-                $command = $repo[$command];
-            }
+        return $this;
+    }
 
-            return [$name => $command];
-        })->all();
+    /**
+     * Get all registered commands.
+     */
+    public function getCommands(): array
+    {
+        return $this->commandBus->getCommands();
+    }
+
+    /**
+     * Check update object for a command and process.
+     */
+    public function processCommand(ResponseObject $update): ResponseObject
+    {
+        return $this->commandBus->handler($update);
     }
 
     /**
      * Magic method to call command related method directly on the CommandBus
      *
-     * @param $method
-     * @param $parameters
      *
      * @return mixed|void
      */
-    public function __call($method, $parameters)
+    public function __call(string $method, array $parameters)
     {
-        if (method_exists($this->commandBus, $method)) {
-            return $this->commandBus->{$method}(...$parameters);
-        }
+        return $this->forwardCallTo($this->commandBus, $method, $parameters);
     }
 }

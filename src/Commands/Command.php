@@ -2,6 +2,7 @@
 
 namespace Telegram\Bot\Commands;
 
+use Telegram\Bot\Commands\Contracts\CommandContract;
 use Telegram\Bot\Exceptions\TelegramCommandException;
 use Telegram\Bot\Exceptions\TelegramSDKException;
 use Telegram\Bot\Traits\HasBot;
@@ -11,7 +12,7 @@ use Throwable;
 /**
  * Class Command.
  */
-abstract class Command implements CommandInterface
+abstract class Command implements CommandContract
 {
     use HasBot;
     use HasUpdate;
@@ -32,8 +33,6 @@ abstract class Command implements CommandInterface
 
     /**
      * Get the name used for this command
-     *
-     * @return string
      */
     public function getName(): string
     {
@@ -43,7 +42,6 @@ abstract class Command implements CommandInterface
     /**
      * Set the name used for this command
      *
-     * @param string $name
      *
      * @return static
      */
@@ -58,8 +56,6 @@ abstract class Command implements CommandInterface
      * Get Command Description.
      *
      * The Telegram command description.
-     *
-     * @return string
      */
     public function getDescription(): string
     {
@@ -69,11 +65,10 @@ abstract class Command implements CommandInterface
     /**
      * Set Command Description.
      *
-     * @param $description
      *
      * @return static
      */
-    public function setDescription(string $description): self
+    public function description(string $description): self
     {
         $this->description = $description;
 
@@ -82,10 +77,6 @@ abstract class Command implements CommandInterface
 
     /**
      * Determine if given argument is provided.
-     *
-     * @param string $argument
-     *
-     * @return bool
      */
     public function hasArgument(string $argument): bool
     {
@@ -96,8 +87,6 @@ abstract class Command implements CommandInterface
      * Get Arguments Description.
      *
      * Get Command Arguments.
-     *
-     * @return array
      */
     public function getArguments(): array
     {
@@ -107,7 +96,6 @@ abstract class Command implements CommandInterface
     /**
      * Set Command Arguments.
      *
-     * @param array $arguments
      *
      * @return static
      */
@@ -120,8 +108,6 @@ abstract class Command implements CommandInterface
 
     /**
      * Get arguments that have not been provided.
-     *
-     * @return array
      */
     public function getArgumentsNotProvided(): array
     {
@@ -131,7 +117,6 @@ abstract class Command implements CommandInterface
     /**
      * Set arguments that have not been provided.
      *
-     * @param array $arguments
      *
      * @return static
      */
@@ -156,11 +141,6 @@ abstract class Command implements CommandInterface
 
     /**
      * Triggered on failure to find params in command.
-     *
-     * @param array     $arguments
-     * @param Throwable $exception
-     *
-     * @return void
      */
     public function failed(array $arguments, Throwable $exception): void
     {
@@ -169,13 +149,11 @@ abstract class Command implements CommandInterface
     /**
      * Helper to Trigger other Commands.
      *
-     * @param CommandInterface|string $command
-     * @param array                   $params
      *
      * @throws TelegramCommandException
      * @throws TelegramSDKException
      */
-    protected function triggerCommand($command, array $params = []): void
+    protected function triggerCommand(CommandContract|string $command, array $params = []): void
     {
         $this->commandBus->execute($command, $this->update, $params, true);
     }

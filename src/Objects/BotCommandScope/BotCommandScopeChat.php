@@ -7,9 +7,9 @@ namespace Telegram\Bot\Objects\BotCommandScope;
  *
  * @link https://core.telegram.org/bots/api#botcommandscopechat
  *
- * @method $this chatId($intOrString)  Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
+ * @method $this chatId(int|string $intOrString)  Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
  */
-class BotCommandScopeChat extends BotCommandScope
+final class BotCommandScopeChat extends BotCommandScope
 {
     protected string $type = 'chat';
 }

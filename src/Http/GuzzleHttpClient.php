@@ -5,8 +5,8 @@ namespace Telegram\Bot\Http;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\RequestException;
-use GuzzleHttp\Promise;
 use GuzzleHttp\Promise\PromiseInterface;
+use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\RequestOptions;
 use Psr\Http\Message\ResponseInterface;
 use Telegram\Bot\Contracts\HttpClientInterface;
@@ -16,17 +16,17 @@ use Throwable;
 /**
  * Class GuzzleHttpClient.
  */
-class GuzzleHttpClient implements HttpClientInterface
+final class GuzzleHttpClient implements HttpClientInterface
 {
     /** @var PromiseInterface[] Holds promises. */
     private static array $promises = [];
 
     /** @var ClientInterface|null HTTP client. */
-    protected ?ClientInterface $client = null;
+    private ?ClientInterface $client = null;
 
     /** @var array Guzzle Config */
-    protected array $config = [
-        RequestOptions::TIMEOUT         => 60,
+    private array $config = [
+        RequestOptions::TIMEOUT => 60,
         RequestOptions::CONNECT_TIMEOUT => 10,
     ];
 
@@ -37,13 +37,11 @@ class GuzzleHttpClient implements HttpClientInterface
      */
     public function __destruct()
     {
-        Promise\unwrap(self::$promises);
+        Utils::unwrap(self::$promises);
     }
 
     /**
      * Get the HTTP client.
-     *
-     * @return ClientInterface
      */
     public function getClient(): ClientInterface
     {
@@ -52,10 +50,6 @@ class GuzzleHttpClient implements HttpClientInterface
 
     /**
      * Set the HTTP client.
-     *
-     * @param ClientInterface $client
-     *
-     * @return GuzzleHttpClient
      */
     public function setClient(ClientInterface $client): self
     {
@@ -66,8 +60,6 @@ class GuzzleHttpClient implements HttpClientInterface
 
     /**
      * Get Guzzle Config.
-     *
-     * @return array
      */
     public function getConfig(): array
     {
@@ -77,7 +69,6 @@ class GuzzleHttpClient implements HttpClientInterface
     /**
      * Set Guzzle Config.
      *
-     * @param array $config
      *
      * @return $this
      */
@@ -89,8 +80,6 @@ class GuzzleHttpClient implements HttpClientInterface
     }
 
     /**
-     * {@inheritdoc}
-     *
      * @throws TelegramSDKException
      */
     public function send(
@@ -99,7 +88,7 @@ class GuzzleHttpClient implements HttpClientInterface
         array $headers = [],
         array $options = [],
         bool $isAsyncRequest = false
-    ) {
+    ): PromiseInterface|ResponseInterface {
         $options[RequestOptions::HEADERS] = $headers;
         $options[RequestOptions::SYNCHRONOUS] = ! $isAsyncRequest;
 

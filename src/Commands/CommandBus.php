@@ -2,41 +2,34 @@
 
 namespace Telegram\Bot\Commands;
 
-use BadMethodCallException;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use InvalidArgumentException;
 use Telegram\Bot\Bot;
+use Telegram\Bot\Commands\Contracts\CommandContract;
+use Telegram\Bot\Commands\Events\CommandNotFoundEvent;
 use Telegram\Bot\Exceptions\TelegramCommandException;
 use Telegram\Bot\Exceptions\TelegramSDKException;
 use Telegram\Bot\Helpers\Validator;
-use Telegram\Bot\Objects\MessageEntity;
-use Telegram\Bot\Objects\Update;
+use Telegram\Bot\Objects\ResponseObject;
 use Telegram\Bot\Traits\HasBot;
 
-/**
- * Class CommandBus.
- */
-class CommandBus
+final class CommandBus
 {
     use HasBot;
 
-    /** @var string|CommandInterface[] Holds all commands. */
-    protected array $commands = [];
+    /** @var string|CommandContract[] Holds all commands. */
+    private array $commands = [];
 
     /**
      * Instantiate Command Bus.
-     *
-     * @param Bot|null $bot
      */
-    public function __construct(Bot $bot = null)
+    public function __construct(?Bot $bot = null)
     {
         $this->bot = $bot;
     }
 
     /**
      * Returns the list of commands.
-     *
-     * @return array
      */
     public function getCommands(): array
     {
@@ -46,13 +39,12 @@ class CommandBus
     /**
      * Add a list of commands.
      *
-     * @param string|CommandInterface[] $commands
-     *
+     * @param  CommandContract[]  $commands
      * @return $this
      */
     public function addCommands(array $commands): self
     {
-        $this->commands = $commands;
+        $this->commands = array_change_key_case($commands);
 
         return $this;
     }
@@ -60,14 +52,13 @@ class CommandBus
     /**
      * Add a command to the commands list.
      *
-     * @param string                  $command      Command name.
-     * @param string|CommandInterface $commandClass Either an object or full path to the command class.
-     *
+     * @param  string  $command      Command name.
+     * @param  string|CommandContract  $commandClass Either an object or full path to the command class.
      * @return $this
      */
-    public function addCommand(string $command, $commandClass): self
+    public function addCommand(string $command, string|CommandContract $commandClass): self
     {
-        $this->commands[$command] = $commandClass;
+        $this->commands[strtolower($command)] = $commandClass;
 
         return $this;
     }
@@ -75,8 +66,7 @@ class CommandBus
     /**
      * Remove a command from the list.
      *
-     * @param string $name Command name.
-     *
+     * @param  string  $name Command name.
      * @return $this
      */
     public function removeCommand(string $name): self
@@ -89,7 +79,6 @@ class CommandBus
     /**
      * Removes a list of commands.
      *
-     * @param array $names
      *
      * @return $this
      */
@@ -104,12 +93,6 @@ class CommandBus
 
     /**
      * Parse a Command for a Match.
-     *
-     * @param string $text
-     * @param int    $offset
-     * @param int    $length
-     *
-     * @return string
      */
     public function parseCommand(string $text, int $offset, int $length): string
     {
@@ -122,16 +105,13 @@ class CommandBus
 
     /**
      * Handles Inbound Messages and Executes Appropriate Command.
-     *
-     * @param Update $update
-     *
-     * @return Update
      */
-    public function handler(Update $update): Update
+    public function handler(ResponseObject $update): ResponseObject
     {
         if (Validator::hasCommand($update)) {
-            Entity::from($update)->commandEntities()
-                ->each(fn (MessageEntity $entity) => $this->process($update, $entity));
+            Entity::from($update)
+                ->commandEntities()
+                ->each(fn ($entity) => $this->process($update, $entity));
         }
 
         return $update;
@@ -140,17 +120,14 @@ class CommandBus
     /**
      * Execute a bot command from the update text.
      *
-     * @param Update        $update
-     * @param MessageEntity $entity
-     *
      * @throws TelegramSDKException
      */
-    protected function process(Update $update, MessageEntity $entity): void
+    private function process(ResponseObject $update, array $entity): void
     {
         $command = $this->parseCommand(
             Entity::from($update)->text(),
-            $entity->offset,
-            $entity->length
+            $entity['offset'],
+            $entity['length']
         );
 
         $this->execute($command, $update, $entity);
@@ -159,17 +136,16 @@ class CommandBus
     /**
      * Execute the command.
      *
-     * @param CommandInterface|string $commandName
-     * @param Update                  $update
-     * @param MessageEntity|array     $entity
-     * @param bool                    $isTriggered
-     *
      * @throws TelegramCommandException
      * @throws TelegramSDKException
      */
-    public function execute($commandName, Update $update, $entity, bool $isTriggered = false): void
+    public function execute(CommandContract|string $commandName, ResponseObject $update, array $entity, bool $isTriggered = false): void
     {
-        $command = $this->resolveCommand($commandName);
+        $command = $this->resolveCommand($commandName, $update);
+
+        if (! $command instanceof CommandContract) {
+            return;
+        }
 
         $parser = Parser::parse($command)->setUpdate($update);
 
@@ -207,22 +183,28 @@ class CommandBus
     /**
      * Resolve given command with IoC container.
      *
-     * @param CommandInterface|string|object $command
-     *
      * @throws TelegramCommandException
-     *
-     * @return CommandInterface
      */
-    public function resolveCommand($command): CommandInterface
+    public function resolveCommand(CommandContract|string $command, ?ResponseObject $update = null): ?CommandContract
     {
+        if ($command instanceof CommandContract) {
+            return $command;
+        }
+
+        $command = $this->commands[strtolower($command)] ?? $command;
+
         if (is_object($command)) {
             return $this->validateCommandClassInstance($command);
         }
 
-        $command = array_change_key_case($this->commands)[strtolower($command)] ?? $command;
-
         if (! class_exists($command)) {
-            throw TelegramCommandException::commandClassDoesNotExist($command);
+            $this->dispatchCommandNotFoundEvent($command, $update);
+
+            if (array_key_exists('help', $this->commands)) {
+                $command = $this->commands['help'];
+            } else {
+                return null;
+            }
         }
 
         try {
@@ -237,37 +219,24 @@ class CommandBus
     /**
      * Validate Command Class Instance.
      *
-     * @param object $command
      *
      * @throws TelegramCommandException
-     *
-     * @return CommandInterface
      */
-    protected function validateCommandClassInstance(object $command): CommandInterface
+    private function validateCommandClassInstance(object $command): CommandContract
     {
-        if ($command instanceof CommandInterface) {
+        if ($command instanceof CommandContract) {
             return $command;
         }
 
         throw TelegramCommandException::commandClassNotValid($command);
     }
 
-    /**
-     * Handle calls to missing methods.
-     *
-     * @param string $method
-     * @param array  $parameters
-     *
-     * @throws BadMethodCallException
-     *
-     * @return mixed
-     */
-    public function __call($method, $parameters)
+    private function dispatchCommandNotFoundEvent(string $command, ?ResponseObject $update): void
     {
-        if (method_exists($this, $method)) {
-            return $this->{$method}(...$parameters);
-        }
-
-        throw new BadMethodCallException("Method [$method] does not exist.");
+        $this->getBot()?->getEventFactory()
+            ->dispatch(
+                CommandNotFoundEvent::NAME,
+                new CommandNotFoundEvent($command, $this->getBot(), $update)
+            );
     }
 }

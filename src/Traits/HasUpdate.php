@@ -3,21 +3,15 @@
 namespace Telegram\Bot\Traits;
 
 use Telegram\Bot\Exceptions\TelegramSDKException;
-use Telegram\Bot\Objects\Update;
+use Telegram\Bot\Objects\ResponseObject;
 
 /**
  * HasUpdate.
  */
 trait HasUpdate
 {
-    /** @var Update|null Telegram Update. */
-    protected ?Update $update = null;
+    protected ?ResponseObject $update = null;
 
-    /**
-     * Determine if Telegram Update is available.
-     *
-     * @return bool
-     */
     public function hasUpdate(): bool
     {
         return $this->update !== null;
@@ -27,10 +21,8 @@ trait HasUpdate
      * Get the Telegram Update.
      *
      * @throws TelegramSDKException
-     *
-     * @return Update
      */
-    public function getUpdate(): Update
+    public function getUpdate(): ResponseObject
     {
         if (! $this->hasUpdate()) {
             throw TelegramSDKException::updateObjectNotFound();
@@ -39,14 +31,7 @@ trait HasUpdate
         return $this->update;
     }
 
-    /**
-     * Set the Last Telegram Update.
-     *
-     * @param Update $update Telegram Update.
-     *
-     * @return static
-     */
-    public function setUpdate(Update $update): self
+    public function setUpdate(ResponseObject $update): self
     {
         $this->update = $update;
 

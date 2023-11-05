@@ -6,34 +6,22 @@ use Illuminate\Support\Str;
 use Telegram\Bot\Contracts\Jsonable;
 use Telegram\Bot\Contracts\Multipartable;
 use Telegram\Bot\FileUpload\InputFile;
-use Telegram\Bot\Objects\Update;
+use Telegram\Bot\Objects\ResponseObject;
 
-/**
- * Validator.
- */
-class Validator
+final class Validator
 {
     /**
      * Determine given param in params array is a file id.
-     *
-     * @param string $inputFileField
-     * @param array  $params
-     *
-     * @return bool
      */
     public static function hasFileId(string $inputFileField, array $params): bool
     {
-        return isset($params[$inputFileField]) && static::isFileId($params[$inputFileField]);
+        return isset($params[$inputFileField]) && self::isFileId($params[$inputFileField]);
     }
 
     /**
      * Determine if given object is an instance of InputFile.
-     *
-     * @param mixed $object
-     *
-     * @return bool
      */
-    public static function isInputFile($object): bool
+    public static function isInputFile(mixed $object): bool
     {
         return $object instanceof InputFile;
     }
@@ -41,11 +29,9 @@ class Validator
     /**
      * Determine the given string is a file id.
      *
-     * @param string $value
-     *
-     * @return bool
+     * @param  mixed|string  $value
      */
-    public static function isFileId($value): bool
+    public static function isFileId(mixed $value): bool
     {
         if (! is_string($value)) {
             return false;
@@ -57,21 +43,17 @@ class Validator
     /**
      * Determine given string is a URL.
      *
-     * @param string $value A filename or URL to a sticker
-     *
-     * @return bool
+     * @param  string  $value A filename or URL to a sticker
      */
     public static function isUrl(string $value): bool
     {
-        return (bool)filter_var($value, FILTER_VALIDATE_URL);
+        return (bool) filter_var($value, FILTER_VALIDATE_URL);
     }
 
     /**
      * Determine given string is a json object.
      *
-     * @param string $string A json string
-     *
-     * @return bool
+     * @param  string  $string A json string
      */
     public static function isJson(string $string): bool
     {
@@ -82,41 +64,30 @@ class Validator
 
     /**
      * Determine if given object is Jsonable.
-     *
-     * @param mixed $object
-     *
-     * @return bool
      */
-    public static function isJsonable($object): bool
+    public static function isJsonable(mixed $object): bool
     {
         return $object instanceof Jsonable;
     }
 
     /**
      * Determine if given object is Multipartable.
-     *
-     * @param mixed $object
-     *
-     * @return bool
      */
-    public static function isMultipartable($object): bool
+    public static function isMultipartable(mixed $object): bool
     {
         return $object instanceof Multipartable;
     }
 
     /**
      * Determine given update object has command entity.
-     *
-     * @param Update $update
-     *
-     * @return bool
      */
-    public static function hasCommand(Update $update): bool
+    public static function hasCommand(ResponseObject $update): bool
     {
-        return (bool)$update->getMessage()
+        return Update::find($update)
+            ->message()
             ->collect()
-            ->filter(fn ($val, $field) => Str::endsWith($field, 'entities'))
+            ->filter(fn ($val, $field): bool => Str::endsWith($field, 'entities'))
             ->flatten()
-            ->contains('type', 'bot_command');
+            ->contains('bot_command');
     }
 }

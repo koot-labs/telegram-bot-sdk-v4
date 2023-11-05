@@ -12,28 +12,18 @@ use Illuminate\Support\Str;
  */
 abstract class AbstractCreateObject extends AbstractObject
 {
-    /**
-     * Create a new object.
-     *
-     * @param array $fields
-     */
-    public function __construct(array $fields = [])
+    public function __call(string $name, array $arguments)
     {
-        parent::__construct($fields);
-    }
+        if (method_exists($this->fields, $name)) {
+            return parent::__call($name, $arguments);
+        }
 
-    /**
-     * Magic method to set properties dynamically.
-     *
-     * @param $name
-     * @param $arguments
-     *
-     * @return $this
-     */
-    public function __call($name, $arguments)
-    {
-        $property = Str::snake($name);
-        $this->fields[$property] = $arguments[0];
+        $value = $arguments[0];
+        if ($value instanceof AbstractObject) {
+            $value = $value->__toArray();
+        }
+
+        $this->fields->offsetSet(Str::snake($name), $value);
 
         return $this;
     }

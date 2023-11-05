@@ -18,8 +18,6 @@ abstract class InputMedia extends AbstractCreateObject implements Multipartable
 
     /**
      * Create a new object.
-     *
-     * @param array $fields
      */
     public function __construct(array $fields = [])
     {
@@ -28,11 +26,11 @@ abstract class InputMedia extends AbstractCreateObject implements Multipartable
         parent::__construct($fields);
     }
 
-    public function toMultipart(): array
+    public function __toMultipart(): array
     {
         return collect($this->fields)
-            ->filter(fn ($field) => Validator::isMultipartable($field))
-            ->map(fn (InputFile $field) => $field->toMultipart())
+            ->filter(fn ($field): bool => Validator::isMultipartable($field))
+            ->map(fn (InputFile $field): array => $field->__toMultipart())
             ->values()
             ->all();
     }

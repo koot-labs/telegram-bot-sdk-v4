@@ -3,84 +3,44 @@
 namespace Telegram\Bot\FileUpload;
 
 use GuzzleHttp\Psr7\LazyOpenStream;
-use GuzzleHttp\Psr7\PumpStream;
-use GuzzleHttp\Psr7\Stream;
 use GuzzleHttp\Psr7\Utils;
-use Iterator;
 use JsonSerializable;
-use Psr\Http\Message\StreamInterface;
 use Telegram\Bot\Contracts\Multipartable;
 
-class InputFile implements Multipartable, JsonSerializable
+final class InputFile implements Multipartable, JsonSerializable
 {
-    protected $contents;
-    protected ?string $filename = null;
-    protected string $multipartName;
+    private string $multipartName;
 
-    /**
-     * Creates a new InputFile object.
-     *
-     * @param mixed       $contents
-     * @param string|null $filename
-     */
-    public function __construct($contents, string $filename = null)
+    public function __construct(protected mixed $contents, protected ?string $filename = null)
     {
-        $this->contents = $contents;
-        $this->filename = $filename;
         $this->multipartName = $this->generateRandomName();
     }
 
-    /**
-     * @param string      $file
-     * @param string|null $filename
-     *
-     * @return static
-     */
-    public static function file(string $file, string $filename = null): self
+    public static function file(string $file, ?string $filename = null): self
     {
-        return new static(new LazyOpenStream($file, 'rb'), $filename);
+        return new self(new LazyOpenStream($file, 'rb'), $filename);
     }
 
-    /**
-     * @param mixed  $contents
-     * @param string $filename
-     *
-     * @return static
-     */
-    public static function contents($contents, string $filename): self
+    public static function contents(mixed $contents, string $filename): self
     {
-        return new static(Utils::streamFor($contents), $filename);
+        return new self(Utils::streamFor($contents), $filename);
     }
 
-    /**
-     * @return string|null
-     */
     public function getFilename(): ?string
     {
         return $this->filename;
     }
 
-    /**
-     * @return bool|callable|float|PumpStream|Stream|int|Iterator|StreamInterface|resource|string|null
-     */
-    public function getContents()
+    public function getContents(): mixed
     {
         return $this->contents;
     }
 
-    /**
-     * @return string
-     */
     public function getMultipartName(): string
     {
         return $this->multipartName;
     }
 
-    /**
-     * @param string $multipartName
-     *
-     * @return $this
-     */
     public function setMultipartName(string $multipartName): self
     {
         $this->multipartName = $multipartName;
@@ -88,33 +48,30 @@ class InputFile implements Multipartable, JsonSerializable
         return $this;
     }
 
-    /**
-     * @return string
-     */
     public function getAttachString(): string
     {
-        return 'attach://' . $this->getMultipartName();
+        return 'attach://'.$this->multipartName;
     }
 
-    public function jsonSerialize()
+    public function jsonSerialize(): mixed
     {
         return $this->getAttachString();
     }
 
     /**
-     * @return array
+     * @return array{name: string, contents: mixed, filename: string|null}
      */
-    public function toMultipart(): array
+    public function __toMultipart(): array
     {
         return [
-            'name'     => $this->getMultipartName(),
-            'contents' => $this->getContents(),
-            'filename' => $this->getFilename(),
+            'name' => $this->multipartName,
+            'contents' => $this->contents,
+            'filename' => $this->filename,
         ];
     }
 
-    protected function generateRandomName(): string
+    private function generateRandomName(): string
     {
-        return substr(md5(uniqid('', true)), 0, 10);
+        return bin2hex(random_bytes(5));
     }
 }

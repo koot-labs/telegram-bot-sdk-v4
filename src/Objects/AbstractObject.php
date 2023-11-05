@@ -3,85 +3,69 @@
 namespace Telegram\Bot\Objects;
 
 use ArrayIterator;
+use CachingIterator;
+use Illuminate\Support\Collection;
 use IteratorAggregate;
 use JsonSerializable;
+use Stringable;
 use Telegram\Bot\Contracts\Arrayable;
 use Telegram\Bot\Contracts\Jsonable;
+use Telegram\Bot\Helpers\Json;
+use Telegram\Bot\Traits\ForwardsCalls;
 
-/**
- * Class AbstractObject.
- */
-abstract class AbstractObject implements Arrayable, IteratorAggregate, Jsonable, JsonSerializable
+abstract class AbstractObject implements Arrayable, IteratorAggregate, Jsonable, JsonSerializable, Stringable
 {
-    /** @var object|array The fields contained in the object. */
-    protected $fields;
+    use ForwardsCalls;
 
-    public function __construct($fields = [])
+    protected Collection $fields;
+
+    public function __construct(array $fields = [])
     {
-        $this->fields = $fields;
+        $this->fields = new Collection($fields);
     }
 
-    /**
-     * Make object with given data.
-     *
-     * @param mixed $data
-     *
-     * @return static
-     */
-    public static function make($data = []): self
+    public static function make(array $fields = []): static
     {
-        return new static($data);
+        return new static($fields);
     }
 
-    /**
-     * Get the object of fields as an associative array.
-     *
-     * @return array
-     */
-    public function toArray(): array
+    public function __toArray(): array
     {
-        return json_decode($this->toJson(), true);
+        return Json::decode($this->__toJson());
     }
 
-    /**
-     * Get the collection of fields as JSON.
-     *
-     * @param int $options
-     *
-     * @return string
-     */
-    public function toJson($options = 0): string
+    public function __toJson(int $options = 0): string
     {
-        return json_encode($this->jsonSerialize(), $options);
+        return Json::encode($this->jsonSerialize(), $options);
     }
 
-    /**
-     * Convert the object into something JSON serializable.
-     *
-     * @return object|array
-     */
-    public function jsonSerialize()
+    public function jsonSerialize(): array
     {
-        return $this->fields;
+        return $this->fields->jsonSerialize();
     }
 
-    /**
-     * Get an iterator for the items.
-     *
-     * @return ArrayIterator
-     */
     public function getIterator(): ArrayIterator
     {
-        return new ArrayIterator($this->fields);
+        return $this->fields->getIterator();
     }
 
-    /**
-     * Convert the object to its string representation.
-     *
-     * @return string
-     */
-    public function __toString()
+    public function getCachingIterator(int $flags = CachingIterator::CALL_TOSTRING): CachingIterator
     {
-        return $this->toJson();
+        return $this->fields->getCachingIterator($flags);
+    }
+
+    public function __toString(): string
+    {
+        return $this->__toJson();
+    }
+
+    public function __debugInfo(): array
+    {
+        return $this->__toArray();
+    }
+
+    public function __call(string $name, array $arguments)
+    {
+        return $this->forwardCallTo($this->fields, $name, $arguments);
     }
 }

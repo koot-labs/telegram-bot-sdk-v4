@@ -4,60 +4,63 @@ namespace Telegram\Bot\Commands;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Telegram\Bot\Objects\MessageEntity;
-use Telegram\Bot\Objects\Update;
+use Telegram\Bot\Helpers\Update;
+use Telegram\Bot\Objects\ResponseObject;
 
 /**
  * Class Entity
  */
-class Entity
+final class Entity
 {
-    protected string $field;
-    protected Update $update;
+    private string $field;
 
-    public static function from(Update $update): self
+    public static function from(ResponseObject $update): self
     {
-        return new static($update);
+        return new self($update);
     }
 
-    public function __construct(Update $update)
+    public function __construct(protected ResponseObject $update)
     {
-        $this->update = $update;
     }
 
-    public function entities(): ?array
+    public function entities(): ?ResponseObject
     {
-        return $this->update->getMessage()->{$this->field()};
+        return $this->message()->{$this->field()};
     }
 
     public function commandEntities(): Collection
     {
-        return collect($this->entities())->filter(fn (MessageEntity $entity) => $entity->type === 'bot_command');
+        return $this->message()->{$this->field()}?->collect()->filter(fn ($entity): bool => $entity['type'] === 'bot_command');
     }
 
     /**
      * Return the relevant text/string that the entities in the update are referencing.
-     *
-     * @return string|null
      */
     public function text(): ?string
     {
-        if (! $this->field()) {
+        if ($this->field() === '') {
             return null;
         }
 
-        if ($this->update->getMessage()->isType('text')) {
-            return $this->update->getMessage()->text;
+        $message = $this->message();
+
+        if ($message->offsetExists('text')) {
+            return $message->offsetGet('text');
         }
 
-        return $this->update->getMessage()->{Str::before($this->field(), '_')};
+        return $message->{Str::before($this->field(), '_')};
     }
 
-    protected function field(): string
+    private function field(): string
     {
-        return $this->field ??= $this->update->getMessage()
+        return $this->field ??= $this->message()
             ->collect()
             ->keys()
-            ->first(fn ($key) => Str::contains($key, 'entities'), '');
+            ->first(fn ($key): bool => Str::contains($key, 'entities'), '');
+    }
+
+    private function message(): ResponseObject
+    {
+        return Update::find($this->update)->message();
     }
 }

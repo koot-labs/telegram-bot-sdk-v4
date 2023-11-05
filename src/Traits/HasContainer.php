@@ -14,8 +14,6 @@ trait HasContainer
 
     /**
      * Determine if IoC Container is set.
-     *
-     * @return bool
      */
     public function hasContainer(): bool
     {
@@ -24,8 +22,6 @@ trait HasContainer
 
     /**
      * Get the IoC Container.
-     *
-     * @return Container
      */
     public function getContainer(): Container
     {
@@ -35,8 +31,7 @@ trait HasContainer
     /**
      * Set the IoC Container.
      *
-     * @param Container $container instance
-     *
+     * @param  Container  $container instance
      * @return $this
      */
     public function setContainer(Container $container): self

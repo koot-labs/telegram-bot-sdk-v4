@@ -14,8 +14,6 @@ trait HasToken
 
     /**
      * Determine if bot token is set.
-     *
-     * @return bool
      */
     public function hasToken(): bool
     {
@@ -26,8 +24,6 @@ trait HasToken
      * Get the bot token.
      *
      * @throws TelegramSDKException
-     *
-     * @return string
      */
     public function getToken(): string
     {
@@ -41,9 +37,7 @@ trait HasToken
     /**
      * Set the bot token.
      *
-     * @param string $token The bot token.
-     *
-     * @return $this
+     * @param  string  $token The bot token.
      */
     public function setToken(string $token): self
     {

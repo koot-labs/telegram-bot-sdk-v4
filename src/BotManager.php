@@ -12,19 +12,17 @@ use Telegram\Bot\Traits\HasContainer;
  *
  * @mixin Bot
  */
-class BotManager
+final class BotManager
 {
     use ForwardsCalls;
     use HasContainer;
     use HasConfig;
 
     /** @var Bot[] The active bot instances. */
-    protected array $bots = [];
+    private array $bots = [];
 
     /**
      * Bots Manager constructor.
-     *
-     * @param array $config
      */
     public function __construct(array $config)
     {
@@ -43,8 +41,6 @@ class BotManager
 
     /**
      * Get the default bot name.
-     *
-     * @return string|null
      */
     public function getDefaultBotName(): ?string
     {
@@ -54,11 +50,9 @@ class BotManager
     /**
      * Set the default bot name.
      *
-     * @param string $name
+     *
      *
      * @throws TelegramSDKException
-     *
-     * @return static
      */
     public function setDefaultBotName(string $name): self
     {
@@ -72,10 +66,8 @@ class BotManager
     /**
      * Get a bot instance.
      *
-     * @param  string|null  $name
      *
      * @throws TelegramSDKException
-     * @return Bot
      */
     public function bot(string $name = null): Bot
     {
@@ -87,10 +79,8 @@ class BotManager
     /**
      * Reconnect to the given bot.
      *
-     * @param  string|null  $name
      *
      * @throws TelegramSDKException
-     * @return Bot
      */
     public function reconnect(string $name = null): Bot
     {
@@ -101,10 +91,6 @@ class BotManager
 
     /**
      * Disconnect from the given bot.
-     *
-     * @param  string|null  $name
-     *
-     * @return static
      */
     public function disconnect(string $name = null): self
     {
@@ -117,11 +103,8 @@ class BotManager
     /**
      * Get the configuration for a bot.
      *
-     * @param string|null $name
      *
      * @throws TelegramSDKException
-     *
-     * @return array
      */
     public function getBotConfig(string $name = null): array
     {
@@ -142,13 +125,10 @@ class BotManager
     /**
      * Make the bot instance.
      *
-     * @param string $name
      *
      * @throws TelegramSDKException
-     *
-     * @return Bot
      */
-    protected function makeBot(string $name): Bot
+    private function makeBot(string $name): Bot
     {
         return (new Bot($this->getBotConfig($name)))->setContainer($this->getContainer());
     }
@@ -156,11 +136,10 @@ class BotManager
     /**
      * Magically pass methods to the default bot.
      *
-     * @param  string  $method
-     * @param  array   $parameters
+     *
+     * @return mixed
      *
      * @throws TelegramSDKException
-     * @return mixed
      */
     public function __call(string $method, array $parameters)
     {

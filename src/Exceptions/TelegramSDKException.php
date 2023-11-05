@@ -13,7 +13,6 @@ class TelegramSDKException extends Exception
     /**
      * Thrown when bot is not configured.
      *
-     * @param string $name
      *
      * @return static
      */
@@ -47,13 +46,12 @@ class TelegramSDKException extends Exception
     /**
      * Thrown when command name is not set.
      *
-     * @param string|object $command
      *
      * @return static
      */
-    public static function commandNameNotSet($command): self
+    public static function commandNameNotSet(object|string $command): self
     {
-        $command = is_object($command) ? get_class($command) : $command;
+        $command = is_object($command) ? $command::class : $command;
 
         return new static("[$command] command has no name. Add a command name in your config!");
     }
@@ -61,27 +59,22 @@ class TelegramSDKException extends Exception
     /**
      * Thrown when http client handler class is not instantiable.
      *
-     * @param string    $httpClient
-     * @param Throwable $e
-     * @param int       $code
      *
      * @return static
      */
     public static function httpClientNotInstantiable(string $httpClient, Throwable $e, int $code = 0): self
     {
-        return new static('Http Client class [' . $httpClient . '] is not instantiable.', $code, $e);
+        return new static('Http Client class ['.$httpClient.'] is not instantiable.', $code, $e);
     }
 
     /**
      * Thrown when file download fails.
      *
-     * @param string $reason
-     * @param string $url
      *
      * @return static
      */
     public static function fileDownloadFailed(string $reason, string $url = null): self
     {
-        return new static($reason . ': Failed to Download File ' . $url);
+        return new static($reason.': Failed to Download File '.$url);
     }
 }

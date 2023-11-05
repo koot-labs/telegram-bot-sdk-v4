@@ -5,40 +5,23 @@ namespace Telegram\Bot\Helpers;
 /**
  * Class Entities.
  */
-class Entities
+final class Entities
 {
-    /** @var string Message or Caption */
-    protected string $text;
     /** @var array Entities from Telegram */
-    protected array $entities;
-    /** @var int Formatting Mode: 0:Markdown | 1:HTML */
-    protected int $mode = 0;
+    private array $entities = [];
 
-    /**
-     * Entities constructor.
-     *
-     * @param string $text
-     */
-    public function __construct(string $text)
+    /** @var int Formatting Mode: 0:Markdown | 1:HTML */
+    private int $mode = 0;
+
+    public function __construct(private string $text)
     {
-        $this->text = $text;
     }
 
-    /**
-     * @param string $text
-     *
-     * @return static
-     */
     public static function format(string $text): self
     {
-        return new static($text);
+        return new self($text);
     }
 
-    /**
-     * @param array $entities
-     *
-     * @return $this
-     */
     public function withEntities(array $entities): self
     {
         $this->entities = $entities;
@@ -46,11 +29,6 @@ class Entities
         return $this;
     }
 
-    /**
-     * Format it to markdown style.
-     *
-     * @return string
-     */
     public function toMarkdown(): string
     {
         $this->mode = 0;
@@ -58,11 +36,6 @@ class Entities
         return $this->apply();
     }
 
-    /**
-     * Format it to HTML syntax.
-     *
-     * @return string
-     */
     public function toHTML(): string
     {
         $this->mode = 1;
@@ -70,12 +43,7 @@ class Entities
         return $this->apply();
     }
 
-    /**
-     * Apply format for given text and entities.
-     *
-     * @return mixed|string
-     */
-    protected function apply()
+    private function apply(): string
     {
         $syntax = $this->syntax();
 
@@ -92,6 +60,7 @@ class Entities
                         ($type === 'text_mention') ? $entity['user']['username'] : $value
                     );
                 }
+
                 $this->text = substr_replace($this->text, $replacement, $entity['offset'], $entity['length']);
             }
         }
@@ -102,20 +71,20 @@ class Entities
     /**
      * Formatting Syntax.
      *
-     * @return array
+     * @return array{bold: string[], italic: string[], code: string[], pre: string[], text_mention: string[], text_link: string[]}
      */
-    protected function syntax(): array
+    private function syntax(): array
     {
         // No need of any special formatting for these entity types.
         // 'url', 'bot_command', 'hashtag', 'cashtag', 'email', 'phone_number', 'mention'
 
         return [
-            'bold'         => ['*%s*', '<strong>%s</strong>'],
-            'italic'       => ['_%s_', '<i>%s</i>'],
-            'code'         => ['`%s`', '<code>%s</code>'],
-            'pre'          => ["```\n%s```", '<pre>%s</pre>'],
+            'bold' => ['*%s*', '<strong>%s</strong>'],
+            'italic' => ['_%s_', '<i>%s</i>'],
+            'code' => ['`%s`', '<code>%s</code>'],
+            'pre' => ["```\n%s```", '<pre>%s</pre>'],
             'text_mention' => ['[%1$s](tg://user?id=%1$s)', '<a href="tg://user?id=%1$s">%1$s</a>'],
-            'text_link'    => ['[%s](%s)', '<a href="%2$s">%1$s</a>'],
+            'text_link' => ['[%s](%s)', '<a href="%2$s">%1$s</a>'],
         ];
     }
 }

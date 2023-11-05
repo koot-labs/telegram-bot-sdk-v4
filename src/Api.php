@@ -3,41 +3,46 @@
 namespace Telegram\Bot;
 
 use Illuminate\Support\Traits\Macroable;
+use SensitiveParameter;
 use Telegram\Bot\Exceptions\TelegramLoginAuthException;
+use Telegram\Bot\Methods\Games;
+use Telegram\Bot\Methods\GettingUpdates;
+use Telegram\Bot\Methods\InlineMode;
+use Telegram\Bot\Methods\Methods;
+use Telegram\Bot\Methods\Passport;
+use Telegram\Bot\Methods\Payments;
+use Telegram\Bot\Methods\Stickers;
+use Telegram\Bot\Methods\UpdateMessages;
 use Telegram\Bot\Traits\ForwardsCalls;
+use Telegram\Bot\Traits\HasToken;
+use Telegram\Bot\Traits\Http;
 
 /**
  * Class Api.
  */
-class Api
+final class Api
 {
     use ForwardsCalls;
     use Macroable {
-        __call as macroCall;
+        Macroable::__call as macroCall;
     }
-
-    use Traits\Http;
-    use Traits\HasToken;
-
-    use Methods\Chat;
-    use Methods\Commands;
-    use Methods\EditMessage;
-    use Methods\Game;
-    use Methods\Get;
-    use Methods\Location;
-    use Methods\Message;
-    use Methods\Passport;
-    use Methods\Payments;
-    use Methods\Query;
-    use Methods\Stickers;
-    use Methods\Update;
+    use Http;
+    use HasToken;
+    use GettingUpdates;
+    use Methods;
+    use UpdateMessages;
+    use InlineMode;
+    use Stickers;
+    use Payments;
+    use Passport;
+    use Games;
 
     /**
      * Instantiates a new Telegram super-class object.
      *
-     * @param  string|null  $token  The Telegram Bot Token.
+     * @param  string  $token  The Telegram Bot Token.
      */
-    public function __construct(string $token = null)
+    public function __construct(#[SensitiveParameter] string $token)
     {
         $this->token = $token;
     }
@@ -45,11 +50,8 @@ class Api
     /**
      * Determine given login auth data is valid.
      *
-     * @param array $auth_data
      *
      * @throws TelegramLoginAuthException
-     *
-     * @return array
      */
     public function isLoginAuthDataValid(array $auth_data): array
     {
@@ -61,7 +63,7 @@ class Api
 
         $data_check_string = collect($auth_data)
             ->only(['username', 'auth_date', 'first_name', 'last_name', 'photo_url', 'id'])
-            ->map(fn ($value, $key) => $key . '=' . $value)
+            ->map(fn ($value, $key): string => $key.'='.$value)
             ->sort()
             ->implode("\n");
 
@@ -82,14 +84,12 @@ class Api
     /**
      * Magic method to process any dynamic method calls.
      *
-     * @param $method
-     * @param $parameters
      *
      * @return mixed
      */
     public function __call($method, $parameters)
     {
-        if (static::hasMacro($method)) {
+        if (self::hasMacro($method)) {
             return $this->macroCall($method, $parameters);
         }
 

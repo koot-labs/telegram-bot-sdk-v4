@@ -3,43 +3,36 @@
 namespace Telegram\Bot\Http;
 
 use GuzzleHttp\Promise\PromiseInterface;
-use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface;
+use Telegram\Bot\Exceptions\TelegramJsonException;
 use Telegram\Bot\Exceptions\TelegramResponseException;
 use Telegram\Bot\Exceptions\TelegramSDKException;
+use Telegram\Bot\Helpers\Json;
+use Telegram\Bot\Objects\ResponseObject;
 
 /**
  * Class TelegramResponse.
  *
  * Handles the response from Telegram API.
  */
-class TelegramResponse
+final class TelegramResponse
 {
     /** @var null|int The HTTP status code response from API. */
-    protected ?int $httpStatusCode = null;
+    private ?int $httpStatusCode = null;
 
     /** @var array The headers returned from API request. */
-    protected array $headers;
+    private array $headers;
 
     /** @var string The raw body of the response from API request. */
-    protected string $body;
+    private string $body;
 
-    /** @var object The decoded body of the API response. */
-    protected object $decodedBody;
+    /** @var null|ResponseObject The decoded body of the API response. */
+    private ?ResponseObject $decodedBody = null;
 
-    /** @var TelegramRequest The original request that returned this response. */
-    protected TelegramRequest $request;
+    /** @var null|TelegramSDKException The exception thrown by this request. */
+    private ?TelegramSDKException $thrownException = null;
 
-    /** @var TelegramSDKException The exception thrown by this request. */
-    protected TelegramSDKException $thrownException;
-
-    /**
-     * Gets the relevant data from the Http client.
-     *
-     * @param TelegramRequest                    $request
-     * @param ResponseInterface|PromiseInterface $response
-     */
-    public function __construct(TelegramRequest $request, $response)
+    public function __construct(protected TelegramRequest $request, PromiseInterface|ResponseInterface $response)
     {
         if ($response instanceof ResponseInterface) {
             $this->httpStatusCode = $response->getStatusCode();
@@ -47,15 +40,9 @@ class TelegramResponse
             $this->headers = $response->getHeaders();
 
             $this->decodeBody();
-        } elseif ($response instanceof PromiseInterface) {
-            $this->httpStatusCode = null;
         } else {
-            throw new InvalidArgumentException(
-                'Second constructor argument "response" must be instance of ResponseInterface or PromiseInterface'
-            );
+            $this->httpStatusCode = null;
         }
-
-        $this->request = $request;
     }
 
     /**
@@ -63,10 +50,10 @@ class TelegramResponse
      */
     public function decodeBody(): void
     {
-        $this->decodedBody = json_decode($this->body);
-
-        if (! is_object($this->decodedBody)) {
-            $this->decodedBody = new \stdClass();
+        try {
+            $this->decodedBody = new ResponseObject(Json::decode($this->body));
+        } catch (TelegramJsonException $e) {
+            $this->thrownException = TelegramResponseException::create($this, $e);
         }
 
         if ($this->isError()) {
@@ -76,12 +63,10 @@ class TelegramResponse
 
     /**
      * Checks if response is an error.
-     *
-     * @return bool
      */
     public function isError(): bool
     {
-        return isset($this->decodedBody->ok) && ($this->decodedBody->ok === false);
+        return $this->decodedBody?->offsetGet('ok') === false;
     }
 
     /**
@@ -89,13 +74,11 @@ class TelegramResponse
      */
     public function makeException(): void
     {
-        $this->thrownException = TelegramResponseException::create($this);
+        $this->thrownException ??= TelegramResponseException::create($this);
     }
 
     /**
      * Return the original request that returned this response.
-     *
-     * @return TelegramRequest
      */
     public function getRequest(): TelegramRequest
     {
@@ -105,8 +88,6 @@ class TelegramResponse
     /**
      * Gets the HTTP status code.
      * Returns NULL if the request was asynchronous since we are not waiting for the response.
-     *
-     * @return null|int
      */
     public function getHttpStatusCode(): ?int
     {
@@ -115,8 +96,6 @@ class TelegramResponse
 
     /**
      * Gets the Request Endpoint used to get the response.
-     *
-     * @return string
      */
     public function getEndpoint(): string
     {
@@ -127,7 +106,6 @@ class TelegramResponse
      * Return the bot token that was used for this request.
      *
      * @throws TelegramSDKException
-     * @return string|null
      */
     public function getToken(): ?string
     {
@@ -136,8 +114,6 @@ class TelegramResponse
 
     /**
      * Return the HTTP headers for this response.
-     *
-     * @return array
      */
     public function getHeaders(): array
     {
@@ -146,8 +122,6 @@ class TelegramResponse
 
     /**
      * Return the raw body response.
-     *
-     * @return string
      */
     public function getBody(): string
     {
@@ -156,22 +130,18 @@ class TelegramResponse
 
     /**
      * Return the decoded body response.
-     *
-     * @return object
      */
-    public function getDecodedBody(): object
+    public function getDecodedBody(): ResponseObject
     {
-        return $this->decodedBody ?? new \stdClass();
+        return $this->decodedBody ?? new ResponseObject();
     }
 
     /**
      * Helper function to return the payload of a successful response.
-     *
-     * @return mixed
      */
-    public function getResult()
+    public function getResult(): mixed
     {
-        return $this->decodedBody->result ?? new \stdClass();
+        return $this->decodedBody?->offsetGet('result') ?? new ResponseObject();
     }
 
     /**
@@ -179,17 +149,15 @@ class TelegramResponse
      *
      * @throws TelegramSDKException
      */
-    public function throwException(): TelegramSDKException
+    public function throwException(): never
     {
         throw $this->thrownException;
     }
 
     /**
      * Returns the exception that was thrown for this request.
-     *
-     * @return TelegramSDKException
      */
-    public function getThrownException(): TelegramSDKException
+    public function getThrownException(): ?TelegramSDKException
     {
         return $this->thrownException;
     }

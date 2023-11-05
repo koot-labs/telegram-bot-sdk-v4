@@ -6,13 +6,17 @@ use Closure;
 use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Support\Traits\Macroable;
 use Telegram\Bot\Addon\AddonManager;
+use Telegram\Bot\Commands\CommandHandler;
+use Telegram\Bot\Commands\Contracts\CallableContract;
+use Telegram\Bot\Commands\Contracts\CommandContract;
 use Telegram\Bot\Commands\Listeners\ProcessCommand;
 use Telegram\Bot\Contracts\HttpClientInterface;
 use Telegram\Bot\Events\EventFactory;
 use Telegram\Bot\Events\UpdateEvent;
 use Telegram\Bot\Exceptions\TelegramSDKException;
+use Telegram\Bot\Helpers\Update;
 use Telegram\Bot\Http\GuzzleHttpClient;
-use Telegram\Bot\Objects\Update;
+use Telegram\Bot\Objects\ResponseObject;
 use Telegram\Bot\Traits\ForwardsCalls;
 use Telegram\Bot\Traits\HasConfig;
 use Telegram\Bot\Traits\HasContainer;
@@ -22,39 +26,41 @@ use Telegram\Bot\Traits\HasContainer;
  *
  * @mixin Api
  */
-class Bot
+final class Bot
 {
     use ForwardsCalls;
     use Macroable {
-        __call as macroCall;
+        Macroable::__call as macroCall;
     }
-
     use HasConfig;
     use HasContainer;
 
-    protected string $name;
-    protected Api $api;
-    protected EventFactory $eventFactory;
-    protected array $listeners;
+    private readonly string $name;
+
+    private Api $api;
+
+    private EventFactory $eventFactory;
+
+    private CommandHandler $commandHandler;
 
     /**
      * Bot constructor.
-     *
-     * @param array $config
      *
      * @throws TelegramSDKException
      */
     public function __construct(array $config = [])
     {
-        $this->config = $config;
+        $this->setConfig($config);
         $this->name = $config['bot'];
 
         $this->api = new Api($this->config('token'));
         $this->setHttpClientHandler($this->config('global.http.client', GuzzleHttpClient::class));
         $this->api->setBaseApiUrl($this->config('global.http.api_url', 'https://api.telegram.org'));
+        $this->api->withFileUrl($this->config('global.http.file_url', ''));
         $this->api->setHttpClientConfig($this->config('global.http.config', []));
         $this->api->setAsyncRequest($this->config('global.http.async', false));
 
+        $this->commandHandler = new CommandHandler($this);
         $this->eventFactory = new EventFactory();
 
         if ($this->hasConfig('listen')) {
@@ -68,8 +74,6 @@ class Bot
 
     /**
      * Get name of the bot (specified in a config).
-     *
-     * @return string
      */
     public function getName(): string
     {
@@ -78,8 +82,6 @@ class Bot
 
     /**
      * Get Api Instance.
-     *
-     * @return Api
      */
     public function getApi(): Api
     {
@@ -88,10 +90,6 @@ class Bot
 
     /**
      * Set Api Instance.
-     *
-     * @param Api $api
-     *
-     * @return static
      */
     public function setApi(Api $api): self
     {
@@ -100,10 +98,25 @@ class Bot
         return $this;
     }
 
+    public function getCommandHandler(): CommandHandler
+    {
+        return $this->commandHandler;
+    }
+
+    public function setCommandHandler(CommandHandler $commandHandler): self
+    {
+        $this->commandHandler = $commandHandler;
+
+        return $this;
+    }
+
+    public function command(string $command, array|string|callable|CommandContract $handler): CommandContract|CallableContract
+    {
+        return $this->commandHandler->command($command, $handler);
+    }
+
     /**
      * Get Event Factory.
-     *
-     * @return EventFactory
      */
     public function getEventFactory(): EventFactory
     {
@@ -112,10 +125,6 @@ class Bot
 
     /**
      * Set Event Factory.
-     *
-     * @param EventFactory $eventFactory
-     *
-     * @return static
      */
     public function setEventFactory(EventFactory $eventFactory): self
     {
@@ -126,12 +135,8 @@ class Bot
 
     /**
      * Adds a listener to be notified when an update is received.
-     *
-     * @param Closure|string $listener
-     *
-     * @return static
      */
-    public function onUpdate($listener): self
+    public function onUpdate(Closure|string $listener): self
     {
         $this->eventFactory->listen(UpdateEvent::NAME, $listener);
 
@@ -140,13 +145,8 @@ class Bot
 
     /**
      * Register an event listener with the dispatcher.
-     *
-     * @param string|array   $events
-     * @param Closure|string $listener
-     *
-     * @return static
      */
-    public function on($events, $listener): self
+    public function on(string|array $events, Closure|string $listener): self
     {
         $this->eventFactory->listen($events, $listener);
 
@@ -157,24 +157,17 @@ class Bot
      * Listen for inbound updates using either webhook or polling method.
      * Dispatches event when an inbound update is received.
      *
-     * @param bool  $webhook
-     * @param array $params
-     *
-     * @throws TelegramSDKException
-     *
-     * @return Update|Update[]
+     * @return ResponseObject|ResponseObject[]
      */
-    public function listen(bool $webhook = false, array $params = [])
+    public function listen(bool $webhook = false, array $params = []): ResponseObject|array
     {
         return $webhook ? $this->useWebHook() : $this->useGetUpdates($params);
     }
 
     /**
      * Process the update object for a command from your webhook.
-     *
-     * @return Update
      */
-    protected function useWebHook(): Update
+    private function useWebHook(): ResponseObject
     {
         $update = $this->api->getWebhookUpdate();
 
@@ -184,13 +177,9 @@ class Bot
     /**
      * Process the update object using the getUpdates method.
      *
-     * @param array $params
-     *
-     * @throws TelegramSDKException
-     *
-     * @return Update[]
+     * @return ResponseObject[]
      */
-    protected function useGetUpdates(array $params = []): array
+    private function useGetUpdates(array $params = []): array
     {
         $updates = $this->api->getUpdates($params);
 
@@ -211,20 +200,18 @@ class Bot
 
     /**
      * Dispatch Update Event.
-     *
-     * @param Update $update
-     *
-     * @return Update
      */
-    public function dispatchUpdateEvent(Update $update): Update
+    public function dispatchUpdateEvent(ResponseObject $response): ResponseObject
     {
-        $event = new UpdateEvent($this, $update);
+        $event = new UpdateEvent($this, $response);
+
+        $update = Update::find($response);
 
         $this->eventFactory->dispatch(UpdateEvent::NAME, $event);
-        $this->eventFactory->dispatch($update->objectType(), $event);
+        $this->eventFactory->dispatch($update->type(), $event);
 
-        if (null !== $update->getMessage()->objectType()) {
-            $this->eventFactory->dispatch($update->objectType() . '.' . $update->getMessage()->objectType(), $event);
+        if (null !== $update->messageType()) {
+            $this->eventFactory->dispatch($update->type().'.'.$update->messageType(), $event);
         }
 
         return $event->update;
@@ -233,13 +220,11 @@ class Bot
     /**
      * Set the HTTP Client Handler.
      *
-     * @param string|HttpClientInterface $handler
+     *
      *
      * @throws TelegramSDKException
-     *
-     * @return static
      */
-    public function setHttpClientHandler($handler): self
+    public function setHttpClientHandler(string|HttpClientInterface $handler): self
     {
         try {
             $client = is_string($handler) ? $this->getContainer()->make($handler) : $handler;
@@ -252,17 +237,9 @@ class Bot
         return $this;
     }
 
-    /**
-     * Magically pass methods to the api.
-     *
-     * @param  string  $method
-     * @param  array   $parameters
-     *
-     * @return mixed
-     */
-    public function __call(string $method, array $parameters)
+    public function __call($method, $parameters)
     {
-        if (static::hasMacro($method)) {
+        if (self::hasMacro($method)) {
             return $this->macroCall($method, $parameters);
         }
 
